@@ -233,11 +233,11 @@ def check_for_update():
 
 def start_updater():
 
-    updater_path = get_updater_path()
+        updater_path = get_updater_path()
 
-    if not os.path.exists(
-        updater_path
-    ):
+        if not os.path.exists(
+            updater_path
+        ):
 
         print(
             "[업데이트] "
