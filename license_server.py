@@ -15,6 +15,8 @@ from fastapi import (
     WebSocketDisconnect
 )
 
+from fastapi.responses import FileResponse
+
 from pydantic import BaseModel
 
 import uvicorn
