@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "macro.py"
+      - "updater.py"
       - "images/**"
       - ".github/workflows/build-macro.yml"
 
@@ -40,7 +41,11 @@ jobs:
           Write-Host "=== Images ==="
           Get-ChildItem images -File
 
-      - name: Build EXE
+      # =====================================================
+      # Entaria.exe 빌드
+      # =====================================================
+
+      - name: Build Entaria
         run: |
           pyinstaller `
             --noconfirm `
@@ -52,48 +57,119 @@ jobs:
             --add-data "images;images" `
             macro.py
 
-      - name: Check EXE
+      # =====================================================
+      # EntariaUpdater.exe 빌드
+      # =====================================================
+
+      - name: Build EntariaUpdater
+        run: |
+          pyinstaller `
+            --noconfirm `
+            --clean `
+            --onefile `
+            --windowed `
+            --name EntariaUpdater `
+            updater.py
+
+      # =====================================================
+      # 빌드 결과 확인
+      # =====================================================
+
+      - name: Check EXE files
         shell: powershell
         run: |
+          Write-Host "=== Build result ==="
+
           if (!(Test-Path "dist/Entaria.exe")) {
             Write-Error "Entaria.exe was not created."
             exit 1
           }
 
-          Get-Item "dist/Entaria.exe"
+          if (!(Test-Path "dist/EntariaUpdater.exe")) {
+            Write-Error "EntariaUpdater.exe was not created."
+            exit 1
+          }
 
-      - name: Upload EXE artifact
+          Get-Item "dist/Entaria.exe"
+          Get-Item "dist/EntariaUpdater.exe"
+
+      # =====================================================
+      # SHA-256 생성
+      # =====================================================
+
+      - name: Create version.json
+        shell: powershell
+        run: |
+          $version = "1.0.${{ github.run_number }}"
+
+          $hash = (
+            Get-FileHash `
+              "dist/Entaria.exe" `
+              -Algorithm SHA256
+          ).Hash.ToLower()
+
+          Write-Host "Version: $version"
+          Write-Host "SHA256: $hash"
+
+          $json = @{
+            version = $version
+            sha256 = $hash
+          } | ConvertTo-Json
+
+          $json | Set-Content `
+            "dist/version.json" `
+            -Encoding UTF8
+
+          Write-Host "=== version.json ==="
+          Get-Content "dist/version.json"
+
+      # =====================================================
+      # Artifact
+      # =====================================================
+
+      - name: Upload Entaria files
         uses: actions/upload-artifact@v4
         with:
           name: Entaria-Windows
-          path: dist/Entaria.exe
+          path: |
+            dist/Entaria.exe
+            dist/EntariaUpdater.exe
+            dist/version.json
           if-no-files-found: error
           retention-days: 30
 
 
+  # =========================================================
+  # 서버 업로드
+  # =========================================================
+
   deploy:
-    name: Upload EXE to Server
+    name: Upload Entaria files to Server
     runs-on: ubuntu-latest
     needs: build
 
     steps:
-      - name: Download EXE artifact
+      - name: Download build artifact
         uses: actions/download-artifact@v4
         with:
           name: Entaria-Windows
           path: dist
 
-      - name: Check downloaded EXE
+      - name: Check downloaded files
         run: |
-          ls -lh dist/Entaria.exe
-          test -f dist/Entaria.exe
+          echo "=== Downloaded files ==="
+          ls -lh dist/
 
-      - name: Upload EXE to server
+          test -f dist/Entaria.exe
+          test -f dist/EntariaUpdater.exe
+          test -f dist/version.json
+
+      - name: Upload Entaria files to server
         uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_KEY }}
-          source: "dist/Entaria.exe"
+          source: "dist/Entaria.exe,dist/EntariaUpdater.exe,dist/version.json"
           target: "/home/yhh1690626/entaria-server/"
           strip_components: 1
