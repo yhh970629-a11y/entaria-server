@@ -1,0 +1,36 @@
+name: Deploy Entaria Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy license_server.py
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "license_server.py"
+          target: "/home/yhh1690626/entaria-server/"
+
+      - name: Restart Entaria
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /home/yhh1690626/entaria-server
+            /home/yhh1690626/entaria-server/venv/bin/python -m py_compile license_server.py
+            sudo systemctl restart entaria
+            sleep 2
+            sudo systemctl is-active entaria
