@@ -1,3 +1,4 @@
+```yaml
 name: Deploy Entaria Server
 
 on:
@@ -18,7 +19,7 @@ jobs:
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          key: ${{ secrets.SSH_KEY }}
           source: "license_server.py"
           target: "/home/yhh1690626/entaria-server/"
 
@@ -27,10 +28,11 @@ jobs:
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          key: ${{ secrets.SSH_KEY }}
           script: |
             cd /home/yhh1690626/entaria-server
             /home/yhh1690626/entaria-server/venv/bin/python -m py_compile license_server.py
             sudo systemctl restart entaria
             sleep 2
             sudo systemctl is-active entaria
+```
