@@ -44,6 +44,18 @@ jobs:
       # =====================================================
       # Entaria.exe 빌드
       # =====================================================
+      - name: Create version_info.py
+        shell: powershell
+        run: |
+          $version = "1.0.${{ github.run_number }}"
+
+          @"
+          APP_VERSION = "$version"
+          "@ | Set-Content `
+            "version_info.py" `
+            -Encoding UTF8
+
+          Write-Host "APP_VERSION = $version"
 
       - name: Build Entaria
         run: |
