@@ -1,3 +1,4 @@
+# GitHub Actions 자동 배포 테스트
 import os
 import json
 import secrets
