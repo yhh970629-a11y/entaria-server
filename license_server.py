@@ -1,4 +1,3 @@
-# GitHub Actions 자동 배포 테스트
 import os
 import json
 import secrets
@@ -26,7 +25,9 @@ import uvicorn
 # 기본 설정
 # =========================================================
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
 
 DATA_FILE = os.path.join(
     BASE_DIR,
@@ -35,6 +36,7 @@ DATA_FILE = os.path.join(
 
 HOST = "0.0.0.0"
 PORT = 8000
+
 
 # =========================================================
 # 업데이트 파일
@@ -49,6 +51,7 @@ UPDATE_VERSION_FILE = os.path.join(
     BASE_DIR,
     "version.json"
 )
+
 
 # =========================================================
 # 관리자 API 키
@@ -361,7 +364,10 @@ def validate_license(
         False
     ):
 
-        return False, "비활성화된 라이선스입니다."
+        return (
+            False,
+            "비활성화된 라이선스입니다."
+        )
 
     expires_at = license_data.get(
         "expires_at",
@@ -374,7 +380,10 @@ def validate_license(
 
     if seconds <= 0:
 
-        return False, "라이선스가 만료되었습니다."
+        return (
+            False,
+            "라이선스가 만료되었습니다."
+        )
 
     locked_hardware = license_data.get(
         "hardware_id",
@@ -886,6 +895,48 @@ def heartbeat(
 
 
 # =========================================================
+# 프로그램 자동 업데이트
+# =========================================================
+
+@app.get("/update/version.json")
+def update_version():
+
+    if not os.path.exists(
+        UPDATE_VERSION_FILE
+    ):
+
+        raise HTTPException(
+            status_code=404,
+            detail="version.json을 찾을 수 없습니다."
+        )
+
+    return FileResponse(
+        UPDATE_VERSION_FILE,
+        media_type="application/json",
+        filename="version.json"
+    )
+
+
+@app.get("/update/Entaria.exe")
+def update_entaria():
+
+    if not os.path.exists(
+        UPDATE_EXE_FILE
+    ):
+
+        raise HTTPException(
+            status_code=404,
+            detail="Entaria.exe를 찾을 수 없습니다."
+        )
+
+    return FileResponse(
+        UPDATE_EXE_FILE,
+        media_type="application/vnd.microsoft.portable-executable",
+        filename="Entaria.exe"
+    )
+
+
+# =========================================================
 # 관리자 인증
 # =========================================================
 
@@ -1325,17 +1376,12 @@ def admin_extend_license(
 # 실시간 채팅
 # =========================================================
 
-# 현재 접속 중인 사용자
-# username -> websocket
 chat_connections = {}
 
-# 최근 채팅 기록
 chat_messages = []
 
-# 동시에 여러 사용자가 접속할 때 데이터 보호
 chat_lock = asyncio.Lock()
 
-# 서버에 보관할 최대 채팅 개수
 MAX_CHAT_MESSAGES = 100
 
 
@@ -1610,10 +1656,6 @@ async def chat_websocket(
 
             data = await websocket.receive_json()
 
-            # -------------------------------------------------
-            # 메시지 가져오기
-            # -------------------------------------------------
-
             message = str(
                 data.get(
                     "message",
@@ -1621,23 +1663,11 @@ async def chat_websocket(
                 )
             ).strip()
 
-
-            # 빈 메시지 무시
             if not message:
 
                 continue
 
-
-            # -------------------------------------------------
-            # 메시지 길이 제한
-            # -------------------------------------------------
-
             message = message[:300]
-
-
-            # -------------------------------------------------
-            # 채팅 메시지 생성
-            # -------------------------------------------------
 
             chat_message = {
 
@@ -1655,19 +1685,12 @@ async def chat_websocket(
 
             }
 
-
-            # -------------------------------------------------
-            # 서버 채팅 기록 저장
-            # -------------------------------------------------
-
             async with chat_lock:
 
                 chat_messages.append(
                     chat_message
                 )
 
-
-                # 오래된 메시지 삭제
                 if len(
                     chat_messages
                 ) > MAX_CHAT_MESSAGES:
@@ -1676,19 +1699,14 @@ async def chat_websocket(
                         :-MAX_CHAT_MESSAGES
                     ]
 
-
-            # -------------------------------------------------
-            # 모든 사용자에게 메시지 전송
-            # -------------------------------------------------
-
             await broadcast_chat(
                 chat_message
             )
 
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # 연결 종료
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     except WebSocketDisconnect:
 
@@ -1702,10 +1720,6 @@ async def chat_websocket(
 
     finally:
 
-        # -----------------------------------------------------
-        # 현재 사용자 연결 제거
-        # -----------------------------------------------------
-
         async with chat_lock:
 
             if chat_connections.get(
@@ -1717,10 +1731,6 @@ async def chat_websocket(
                     None
                 )
 
-
-        # -----------------------------------------------------
-        # 퇴장 알림
-        # -----------------------------------------------------
 
         await broadcast_chat({
 
@@ -1738,10 +1748,6 @@ async def chat_websocket(
 
         })
 
-
-        # -----------------------------------------------------
-        # 온라인 사용자 갱신
-        # -----------------------------------------------------
 
         online_users = await get_online_users()
 
@@ -1785,9 +1791,16 @@ if __name__ == "__main__":
         "WebSocket Chat: /ws/chat"
     )
 
+    print(
+        "Update API: /update/version.json"
+    )
+
+    print(
+        "Update API: /update/Entaria.exe"
+    )
+
     uvicorn.run(
         app,
         host=HOST,
         port=PORT
     )
-
