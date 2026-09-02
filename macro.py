@@ -6,6 +6,7 @@ import hashlib
 import platform
 import uuid
 import json
+import subprocess
 
 import tkinter as tk
 from tkinter import scrolledtext, messagebox
@@ -44,7 +45,10 @@ def get_current_version():
     GitHub Actions 빌드 시 생성되는 version_info.py의
     APP_VERSION을 사용한다.
     """
-    return str(APP_VERSION).strip() or "0.0.0"
+
+    return str(
+        APP_VERSION
+    ).strip() or "0.0.0"
 
 
 APP_VERSION = get_current_version()
@@ -55,7 +59,11 @@ def get_updater_path():
     EntariaUpdater.exe 위치
     """
 
-    if getattr(sys, "frozen", False):
+    if getattr(
+        sys,
+        "frozen",
+        False
+    ):
 
         return os.path.join(
             os.path.dirname(
@@ -233,11 +241,11 @@ def check_for_update():
 
 def start_updater():
 
-        updater_path = get_updater_path()
+    updater_path = get_updater_path()
 
-        if not os.path.exists(
-            updater_path
-        ):
+    if not os.path.exists(
+        updater_path
+    ):
 
         print(
             "[업데이트] "
@@ -247,8 +255,6 @@ def start_updater():
         return False
 
     try:
-
-        import subprocess
 
         subprocess.Popen(
             [updater_path],
@@ -296,16 +302,16 @@ def check_update_and_exit():
 
         updater_path = get_updater_path()
 
-if not os.path.exists(
-    updater_path
-):
+        if not os.path.exists(
+            updater_path
+        ):
 
-    print(
-        "[업데이트] "
-        "EntariaUpdater.exe를 찾을 수 없습니다."
-    )
+            print(
+                "[업데이트] "
+                "EntariaUpdater.exe를 찾을 수 없습니다."
+            )
 
-    return
+            return
 
         print(
             "[업데이트] "
@@ -332,6 +338,10 @@ if not os.path.exists(
         )
 
 
+# =========================================================
+# API
+# =========================================================
+
 VERIFY_URL = f"{SERVER_URL}/verify"
 REGISTER_URL = f"{SERVER_URL}/register"
 LOGIN_URL = f"{SERVER_URL}/login"
@@ -344,14 +354,31 @@ CHAT_WS_URL = "wss://api.entaria1004.win/ws/chat"
 # EXE / Python 공통 파일 경로
 # =========================================================
 
-if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+if getattr(
+    sys,
+    "frozen",
+    False
+) and hasattr(
+    sys,
+    "_MEIPASS"
+):
+
     BASE_DIR = sys._MEIPASS
+
 else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    BASE_DIR = os.path.dirname(
+        os.path.abspath(__file__)
+    )
 
 
 def resource_path(filename):
-    return os.path.join(BASE_DIR, "images", filename)
+
+    return os.path.join(
+        BASE_DIR,
+        "images",
+        filename
+    )
 
 
 # =========================================================
@@ -401,12 +428,25 @@ LICENSE_CHECK_INTERVAL = 30
 # 이미지
 # =========================================================
 
-TARGET1 = resource_path("target1.png")
-TARGET2 = resource_path("target2.png")
-TARGET3 = resource_path("target3.png")
-TARGET4 = resource_path("target4.png")
+TARGET1 = resource_path(
+    "target1.png"
+)
 
-BACKGROUND_IMAGE = resource_path("maplestory.png")
+TARGET2 = resource_path(
+    "target2.png"
+)
+
+TARGET3 = resource_path(
+    "target3.png"
+)
+
+TARGET4 = resource_path(
+    "target4.png"
+)
+
+BACKGROUND_IMAGE = resource_path(
+    "maplestory.png"
+)
 
 
 # =========================================================
@@ -441,7 +481,9 @@ def load_buff_keys():
             BUFF_KEYS_CONFIG_FILE
         ):
 
-            BUFF_KEYS = BUFF_KEYS_DEFAULT.copy()
+            BUFF_KEYS = (
+                BUFF_KEYS_DEFAULT.copy()
+            )
 
             return
 
@@ -458,7 +500,9 @@ def load_buff_keys():
 
         if len(lines) != 8:
 
-            BUFF_KEYS = BUFF_KEYS_DEFAULT.copy()
+            BUFF_KEYS = (
+                BUFF_KEYS_DEFAULT.copy()
+            )
 
             return
 
@@ -467,7 +511,9 @@ def load_buff_keys():
             for key in lines
         ):
 
-            BUFF_KEYS = BUFF_KEYS_DEFAULT.copy()
+            BUFF_KEYS = (
+                BUFF_KEYS_DEFAULT.copy()
+            )
 
             return
 
@@ -475,7 +521,9 @@ def load_buff_keys():
 
     except Exception:
 
-        BUFF_KEYS = BUFF_KEYS_DEFAULT.copy()
+        BUFF_KEYS = (
+            BUFF_KEYS_DEFAULT.copy()
+        )
 
 
 # =========================================================
@@ -570,7 +618,9 @@ def load_buff_hotkey():
 
     except Exception:
 
-        BUFF_HOTKEY = BUFF_HOTKEY_DEFAULT
+        BUFF_HOTKEY = (
+            BUFF_HOTKEY_DEFAULT
+        )
 
 
 def save_buff_hotkey(key):
@@ -673,10 +723,15 @@ HARDWARE_ID = get_hardware_id()
 
 
 # =========================================================
-# 로그인 창
+# 업데이트 확인
 # =========================================================
 
 check_update_and_exit()
+
+
+# =========================================================
+# 로그인 창
+# =========================================================
 
 login_root = tk.Tk()
 
@@ -2118,9 +2173,6 @@ def create_main_window():
 
     # =====================================================
     # 채팅 수신
-    #
-    # recv() 무한 대기
-    # 10초 동안 메시지가 없어도 연결 유지
     # =====================================================
 
     def chat_receive_loop(ws):
@@ -2326,7 +2378,6 @@ def create_main_window():
                     "⚠ 채팅 서버 연결이 종료되었습니다."
                 )
 
-
                 # -----------------------------------------
                 # 자동 재연결
                 # -----------------------------------------
@@ -2451,8 +2502,6 @@ def create_main_window():
 
 
             # -----------------------------------------
-            # 핵심 수정
-            #
             # 연결 후 recv timeout 제거
             # -----------------------------------------
 
@@ -2904,8 +2953,6 @@ def create_main_window():
 
         # =============================================
         # 채팅창 닫기
-        #
-        # 창만 숨기고 WebSocket 유지
         # =============================================
 
         def chat_window_close():
@@ -4297,12 +4344,14 @@ def create_main_window():
 
 username_entry.bind(
     "<Return>",
-    lambda event: login()
+    lambda event:
+    login()
 )
 
 password_entry.bind(
     "<Return>",
-    lambda event: login()
+    lambda event:
+    login()
 )
 
 
