@@ -70,6 +70,24 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+
+  deploy:
+    name: Upload EXE to Server
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download EXE artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Entaria-Windows
+          path: dist
+
+      - name: Check downloaded EXE
+        run: |
+          ls -lh dist/Entaria.exe
+          test -f dist/Entaria.exe
+
       - name: Upload EXE to server
         uses: appleboy/scp-action@v1
         with:
