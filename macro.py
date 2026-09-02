@@ -23,44 +23,108 @@ from PIL import Image, ImageTk
 # =========================================================
 
 SERVER_URL = "https://api.entaria1004.win"
+
+
 # =========================================================
 # 자동 업데이트
 # =========================================================
 
 VERSION_URL = f"{SERVER_URL}/update/version.json"
 
-try:
-    from version_info import APP_VERSION
-except Exception:
-    APP_VERSION = "0.0.0"
+
+def get_current_version():
+    """
+    현재 실행 중인 Entaria.exe의 버전.
+    PyInstaller 빌드 시 환경변수 ENTARIA_VERSION을 사용한다.
+    """
+
+    version = os.environ.get(
+        "ENTARIA_VERSION",
+        ""
+    ).strip()
+
+    if version:
+        return version
+
+    # 개발 중 .py 실행
+    return "0.0.0"
+
+
+APP_VERSION = get_current_version()
 
 
 def get_updater_path():
     """
     EntariaUpdater.exe 위치
     """
+
     if getattr(sys, "frozen", False):
+
         return os.path.join(
-            os.path.dirname(sys.executable),
+            os.path.dirname(
+                sys.executable
+            ),
             "EntariaUpdater.exe"
         )
 
     return os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
+        os.path.dirname(
+            os.path.abspath(__file__)
+        ),
         "EntariaUpdater.exe"
     )
 
 
 def parse_version(version):
     """
-    1.0.12 -> (1, 0, 12)
+    예:
+        1.0.12
+        →
+        (1, 0, 12)
     """
+
     try:
+
+        parts = str(
+            version
+        ).strip().split(".")
+
+        result = []
+
+        for part in parts:
+
+            digits = ""
+
+            for char in part:
+
+                if char.isdigit():
+
+                    digits += char
+
+                else:
+
+                    break
+
+            if digits:
+
+                result.append(
+                    int(digits)
+                )
+
+            else:
+
+                result.append(0)
+
+        while len(result) < 3:
+
+            result.append(0)
+
         return tuple(
-            int(x)
-            for x in str(version).strip().split(".")
+            result[:3]
         )
+
     except Exception:
+
         return (0, 0, 0)
 
 
@@ -73,11 +137,13 @@ def check_for_update():
     """
 
     try:
+
         response = requests.get(
             VERSION_URL,
             timeout=5,
             headers={
-                "Cache-Control": "no-cache"
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache"
             }
         )
 
@@ -85,25 +151,48 @@ def check_for_update():
 
         data = response.json()
 
-        if not isinstance(data, dict):
+        if not isinstance(
+            data,
+            dict
+        ):
+
+            print(
+                "[업데이트] 잘못된 version.json"
+            )
+
             return False
 
         latest_version = str(
-            data.get("version", "")
+            data.get(
+                "version",
+                ""
+            )
         ).strip()
 
         if not latest_version:
+
+            print(
+                "[업데이트] 서버 버전 정보 없음"
+            )
+
             return False
 
-        current = parse_version(APP_VERSION)
-        latest = parse_version(latest_version)
+        current = parse_version(
+            APP_VERSION
+        )
 
-        print(
-            f"[업데이트] 현재 버전: {APP_VERSION}"
+        latest = parse_version(
+            latest_version
         )
 
         print(
-            f"[업데이트] 서버 버전: {latest_version}"
+            f"[업데이트] 현재 버전 : "
+            f"{APP_VERSION}"
+        )
+
+        print(
+            f"[업데이트] 서버 버전 : "
+            f"{latest_version}"
         )
 
         if latest > current:
@@ -120,10 +209,26 @@ def check_for_update():
 
         return False
 
+    except requests.exceptions.Timeout:
+
+        print(
+            "[업데이트] 서버 확인 시간 초과"
+        )
+
+        return False
+
+    except requests.exceptions.ConnectionError:
+
+        print(
+            "[업데이트] 업데이트 서버 연결 실패"
+        )
+
+        return False
+
     except Exception as e:
 
         print(
-            f"[업데이트] 확인 실패: {e}"
+            f"[업데이트] 확인 실패 : {e}"
         )
 
         return False
@@ -133,10 +238,13 @@ def start_updater():
 
     updater_path = get_updater_path()
 
-    if not os.path.exists(updater_path):
+    if not os.path.exists(
+        updater_path
+    ):
 
         print(
-            "[업데이트] EntariaUpdater.exe를 찾을 수 없습니다."
+            "[업데이트] "
+            "EntariaUpdater.exe를 찾을 수 없습니다."
         )
 
         return False
@@ -147,7 +255,9 @@ def start_updater():
 
         subprocess.Popen(
             [updater_path],
-            cwd=os.path.dirname(updater_path),
+            cwd=os.path.dirname(
+                updater_path
+            ),
             close_fds=True
         )
 
@@ -156,47 +266,74 @@ def start_updater():
     except Exception as e:
 
         print(
-            f"[업데이트] Updater 실행 실패: {e}"
+            f"[업데이트] Updater 실행 실패 : {e}"
         )
 
         return False
 
 
 def check_update_and_exit():
+    """
+    Entaria.exe 시작 직후 업데이트 확인.
 
-    # 개발 중인 .py 실행에서는 업데이트하지 않는다.
-    if not getattr(sys, "frozen", False):
+    개발 중 .py 실행에서는 업데이트하지 않는다.
+    """
+
+    if not getattr(
+        sys,
+        "frozen",
+        False
+    ):
+
         return
 
     try:
 
-        update_available = check_for_update()
+        update_available = (
+            check_for_update()
+        )
 
         if not update_available:
+
             return
 
         updater_path = get_updater_path()
 
-        if not os.path.exists(updater_path):
+        if not os.path.exists(
+            updater_path
+        ):
+
+            print(
+                "[업데이트] "
+                "Updater가 없어 업데이트를 건너뜁니다."
+            )
+
             return
 
         print(
-            "[업데이트] EntariaUpdater.exe 실행"
+            "[업데이트] "
+            "EntariaUpdater.exe 실행"
         )
 
         started = start_updater()
 
         if started:
 
-            # 현재 Entaria.exe 종료
-            # Updater가 EXE를 교체할 수 있도록 한다.
+            print(
+                "[업데이트] "
+                "Entaria.exe 종료"
+            )
+
+            # Updater가 현재 EXE를 교체할 수 있도록
+            # Entaria.exe를 즉시 종료한다.
             os._exit(0)
 
     except Exception as e:
 
         print(
-            f"[업데이트] 업데이트 처리 실패: {e}"
+            f"[업데이트] 업데이트 처리 실패 : {e}"
         )
+
 
 VERIFY_URL = f"{SERVER_URL}/verify"
 REGISTER_URL = f"{SERVER_URL}/register"
