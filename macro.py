@@ -32,22 +32,19 @@ SERVER_URL = "https://api.entaria1004.win"
 VERSION_URL = f"{SERVER_URL}/update/version.json"
 
 
+try:
+    from version_info import APP_VERSION
+except Exception:
+    APP_VERSION = "0.0.0"
+
+
 def get_current_version():
     """
     현재 실행 중인 Entaria.exe의 버전.
-    PyInstaller 빌드 시 환경변수 ENTARIA_VERSION을 사용한다.
+    GitHub Actions 빌드 시 생성되는 version_info.py의
+    APP_VERSION을 사용한다.
     """
-
-    version = os.environ.get(
-        "ENTARIA_VERSION",
-        ""
-    ).strip()
-
-    if version:
-        return version
-
-    # 개발 중 .py 실행
-    return "0.0.0"
+    return str(APP_VERSION).strip() or "0.0.0"
 
 
 APP_VERSION = get_current_version()
@@ -299,16 +296,16 @@ def check_update_and_exit():
 
         updater_path = get_updater_path()
 
-        if not os.path.exists(
-            updater_path
-        ):
+if not os.path.exists(
+    updater_path
+):
 
-            print(
-                "[업데이트] "
-                "Updater가 없어 업데이트를 건너뜁니다."
-            )
+    print(
+        "[업데이트] "
+        "EntariaUpdater.exe를 찾을 수 없습니다."
+    )
 
-            return
+    return
 
         print(
             "[업데이트] "
