@@ -36,6 +36,19 @@ DATA_FILE = os.path.join(
 HOST = "0.0.0.0"
 PORT = 8000
 
+# =========================================================
+# 업데이트 파일
+# =========================================================
+
+UPDATE_EXE_FILE = os.path.join(
+    BASE_DIR,
+    "Entaria.exe"
+)
+
+UPDATE_VERSION_FILE = os.path.join(
+    BASE_DIR,
+    "version.json"
+)
 
 # =========================================================
 # 관리자 API 키
