@@ -1,0 +1,7 @@
+licenses.json
+venv/
+__pycache__/
+*.pyc
+*.bak
+*.save
+*.save.*
