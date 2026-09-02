@@ -23,6 +23,180 @@ from PIL import Image, ImageTk
 # =========================================================
 
 SERVER_URL = "https://api.entaria1004.win"
+# =========================================================
+# 자동 업데이트
+# =========================================================
+
+VERSION_URL = f"{SERVER_URL}/update/version.json"
+
+try:
+    from version_info import APP_VERSION
+except Exception:
+    APP_VERSION = "0.0.0"
+
+
+def get_updater_path():
+    """
+    EntariaUpdater.exe 위치
+    """
+    if getattr(sys, "frozen", False):
+        return os.path.join(
+            os.path.dirname(sys.executable),
+            "EntariaUpdater.exe"
+        )
+
+    return os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "EntariaUpdater.exe"
+    )
+
+
+def parse_version(version):
+    """
+    1.0.12 -> (1, 0, 12)
+    """
+    try:
+        return tuple(
+            int(x)
+            for x in str(version).strip().split(".")
+        )
+    except Exception:
+        return (0, 0, 0)
+
+
+def check_for_update():
+    """
+    서버의 최신 버전을 확인한다.
+
+    True  = 업데이트 필요
+    False = 최신 버전
+    """
+
+    try:
+        response = requests.get(
+            VERSION_URL,
+            timeout=5,
+            headers={
+                "Cache-Control": "no-cache"
+            }
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        if not isinstance(data, dict):
+            return False
+
+        latest_version = str(
+            data.get("version", "")
+        ).strip()
+
+        if not latest_version:
+            return False
+
+        current = parse_version(APP_VERSION)
+        latest = parse_version(latest_version)
+
+        print(
+            f"[업데이트] 현재 버전: {APP_VERSION}"
+        )
+
+        print(
+            f"[업데이트] 서버 버전: {latest_version}"
+        )
+
+        if latest > current:
+
+            print(
+                "[업데이트] 새 버전이 있습니다."
+            )
+
+            return True
+
+        print(
+            "[업데이트] 현재 버전이 최신입니다."
+        )
+
+        return False
+
+    except Exception as e:
+
+        print(
+            f"[업데이트] 확인 실패: {e}"
+        )
+
+        return False
+
+
+def start_updater():
+
+    updater_path = get_updater_path()
+
+    if not os.path.exists(updater_path):
+
+        print(
+            "[업데이트] EntariaUpdater.exe를 찾을 수 없습니다."
+        )
+
+        return False
+
+    try:
+
+        import subprocess
+
+        subprocess.Popen(
+            [updater_path],
+            cwd=os.path.dirname(updater_path),
+            close_fds=True
+        )
+
+        return True
+
+    except Exception as e:
+
+        print(
+            f"[업데이트] Updater 실행 실패: {e}"
+        )
+
+        return False
+
+
+def check_update_and_exit():
+
+    # 개발 중인 .py 실행에서는 업데이트하지 않는다.
+    if not getattr(sys, "frozen", False):
+        return
+
+    try:
+
+        update_available = check_for_update()
+
+        if not update_available:
+            return
+
+        updater_path = get_updater_path()
+
+        if not os.path.exists(updater_path):
+            return
+
+        print(
+            "[업데이트] EntariaUpdater.exe 실행"
+        )
+
+        started = start_updater()
+
+        if started:
+
+            # 현재 Entaria.exe 종료
+            # Updater가 EXE를 교체할 수 있도록 한다.
+            os._exit(0)
+
+    except Exception as e:
+
+        print(
+            f"[업데이트] 업데이트 처리 실패: {e}"
+        )
 
 VERIFY_URL = f"{SERVER_URL}/verify"
 REGISTER_URL = f"{SERVER_URL}/register"
@@ -367,6 +541,8 @@ HARDWARE_ID = get_hardware_id()
 # =========================================================
 # 로그인 창
 # =========================================================
+
+check_update_and_exit()
 
 login_root = tk.Tk()
 
