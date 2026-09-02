@@ -69,3 +69,13 @@ jobs:
           path: dist/Entaria.exe
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload EXE to server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "dist/Entaria.exe"
+          target: "/home/yhh1690626/entaria-server/"
+          strip_components: 1
