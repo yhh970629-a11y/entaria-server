@@ -116,7 +116,7 @@ POSITION_HUNT_INTERVAL_MIN = 0.10
 POSITION_HUNT_INTERVAL_MAX = 0.22
 
 # 마나 포션 설정
-MP_POTION_DEFAULT_KEY = "pgdn"
+MP_POTION_DEFAULT_KEY = "f5"
 MP_POTION_DEFAULT_THRESHOLD = 30
 MP_POTION_CHECK_INTERVAL = 0.20
 MP_BAR_SEARCH_WIDTH = 360
@@ -186,45 +186,102 @@ def get_game_client_rect_on_screen():
 
 
 def detect_mp_percent():
-    """게임 HUD 좌측 상단의 파란 MP 게이지를 색상으로 감지해 대략적인 %를 반환합니다."""
+    """게임 클라이언트 좌측 하단의 파란 MP 게이지를 색상으로 감지합니다.
+
+    MP 숫자는 사용하지 않고, 실제 파란색으로 채워진 게이지 길이를
+    전체 게이지 길이에 대한 비율로 환산합니다.
+    """
     rect = get_game_client_rect_on_screen()
     if not rect:
         return None
 
     gx, gy, gw, gh = rect
-    w = min(MP_BAR_SEARCH_WIDTH, gw)
-    h = min(MP_BAR_SEARCH_HEIGHT, gh)
-    if w < 100 or h < 50:
+    if gw < 400 or gh < 300:
         return None
 
     try:
-        frame = np.array(pyautogui.screenshot(region=(gx, gy, w, h)))
-        hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
+        # 1vv.png 기준 MP HUD는 클라이언트 좌측 하단에 있습니다.
+        # 해상도가 달라져도 게임 클라이언트 크기에 비례하도록 ROI를 잡습니다.
+        roi_x = 0
+        roi_y = int(gh * 0.84)
+        roi_w = min(int(gw * 0.28), gw)
+        roi_h = min(int(gh * 0.16), gh - roi_y)
 
-        # 스크린샷의 MP 바(청색) 계열을 넓게 잡습니다.
-        lower = np.array([85, 70, 90], dtype=np.uint8)
-        upper = np.array([125, 255, 255], dtype=np.uint8)
-        mask = cv2.inRange(hsv, lower, upper)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
-
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        candidates = []
-        for contour in contours:
-            x, y, cw, ch = cv2.boundingRect(contour)
-            if cw >= 80 and 6 <= ch <= 30 and 0 <= y <= 75:
-                candidates.append((cw * ch, x, y, cw, ch))
-
-        if not candidates:
+        if roi_w <= 0 or roi_h <= 0:
             return None
 
-        _, x, y, cw, ch = max(candidates)
-        # 이미지 기준 MP 바의 실제 내부 길이는 약 220px입니다.
-        full_width = 220.0
-        percent = max(0.0, min(100.0, (cw / full_width) * 100.0))
-        return percent
+        frame = np.array(
+            pyautogui.screenshot(
+                region=(gx + roi_x, gy + roi_y, roi_w, roi_h)
+            )
+        )
+        if frame.size == 0:
+            return None
+
+        hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
+
+        # 엔타리아 스크린샷의 MP 바에 해당하는 청색 계열.
+        # 밝기/채도가 조금 달라져도 잡히도록 기존보다 범위를 넓혔습니다.
+        lower = np.array([85, 55, 55], dtype=np.uint8)
+        upper = np.array([135, 255, 255], dtype=np.uint8)
+        mask = cv2.inRange(hsv, lower, upper)
+
+        # 작은 노이즈를 제거하고 게이지 내부의 끊어진 픽셀을 연결합니다.
+        kernel = np.ones((3, 3), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+        # MP 바는 ROI 안에서 '가로로 긴 파란색 연속 구간'입니다.
+        # 여러 행을 검사해서 가장 안정적인 파란 구간 폭을 구합니다.
+        row_widths = []
+        for y in range(mask.shape[0]):
+            row = mask[y] > 0
+            if not np.any(row):
+                continue
+
+            padded = np.concatenate(([False], row, [False]))
+            changes = np.diff(padded.astype(np.int8))
+            starts = np.flatnonzero(changes == 1)
+            ends = np.flatnonzero(changes == -1)
+
+            if len(starts) == 0:
+                continue
+
+            runs = ends - starts
+            valid_runs = runs[runs >= 20]
+            if len(valid_runs) == 0:
+                continue
+
+            # 이 행에서 가장 긴 파란 연속 구간을 MP 후보로 사용합니다.
+            row_widths.append(int(np.max(valid_runs)))
+
+        if len(row_widths) < 2:
+            return None
+
+        # 이상치에 덜 민감하도록 상위/하위 극단값을 제외하고 중앙값 사용.
+        row_widths.sort()
+        trim = max(0, len(row_widths) // 8)
+        if trim > 0 and len(row_widths) > trim * 2:
+            stable_widths = row_widths[trim:-trim]
+        else:
+            stable_widths = row_widths
+
+        filled_width = float(np.median(stable_widths))
+
+        # 1vv.png에서 실제 MP 내부 게이지 길이는 약 170px.
+        # 게임 클라이언트 크기에 비례시켜 해상도 변경에도 대응합니다.
+        full_width = gw * 0.17
+        full_width = max(120.0, min(220.0, full_width))
+
+        # 검출된 폭이 전체 길이를 넘으면 100%로 제한합니다.
+        filled_width = min(filled_width, full_width)
+        percent = (filled_width / full_width) * 100.0
+        percent = max(0.0, min(100.0, percent))
+
+        return round(percent, 1)
+
     except Exception:
         return None
-
 
 # =========================================================
 # 다크 테마
