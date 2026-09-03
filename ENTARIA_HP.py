@@ -100,7 +100,7 @@ BUFF_KEYS_CONFIG_FILE = os.path.join(CONFIG_DIR, "buff_keys.txt")
 # =========================================================
 
 WINDOW_WIDTH = 1120
-WINDOW_HEIGHT = 760
+WINDOW_HEIGHT = 1000
 
 CONFIDENCE = 0.80
 SEARCH_DELAY = 0.10
@@ -121,6 +121,14 @@ MP_POTION_DEFAULT_THRESHOLD = 30
 MP_POTION_CHECK_INTERVAL = 0.20
 MP_BAR_SEARCH_WIDTH = 360
 MP_BAR_SEARCH_HEIGHT = 100
+
+# HP 포션 설정
+HP_POTION_DEFAULT_KEY = "home"
+HP_POTION_DEFAULT_THRESHOLD = 30
+HP_POTION_CHECK_INTERVAL = 0.20
+HP_BAR_SEARCH_WIDTH = 360
+HP_BAR_SEARCH_HEIGHT = 120
+HP_MP_BAR_FULL_WIDTH = 220.0
 
 # 제자리사냥은 게임 창이 실제로 활성화되어 있을 때만 A키를 입력합니다.
 GAME_WINDOW_TITLE_KEYWORDS = ("MapleStory", "ENTARIA")
@@ -283,6 +291,84 @@ def detect_mp_percent():
     except Exception:
         return None
 
+
+# =========================================================
+# HP 게이지 감지
+# =========================================================
+
+def detect_hp_percent():
+    """게임 클라이언트 좌측 하단의 빨간 HP 게이지를 색상으로 감지합니다."""
+    rect = get_game_client_rect_on_screen()
+    if not rect:
+        return None
+
+    gx, gy, gw, gh = rect
+    if gw < 400 or gh < 300:
+        return None
+
+    try:
+        # HP/MP HUD가 있는 좌측 하단 영역을 조금 넓게 잡습니다.
+        roi_x = 0
+        roi_y = int(gh * 0.78)
+        roi_w = min(int(gw * 0.28), gw)
+        roi_h = min(HP_BAR_SEARCH_HEIGHT, gh - roi_y)
+        if roi_w <= 0 or roi_h <= 0:
+            return None
+
+        frame = np.array(
+            pyautogui.screenshot(
+                region=(gx + roi_x, gy + roi_y, roi_w, roi_h)
+            )
+        )
+        if frame.size == 0:
+            return None
+
+        hsv = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
+        # 빨강은 HSV에서 0도와 180도 근처로 나뉩니다.
+        lower1 = np.array([0, 70, 60], dtype=np.uint8)
+        upper1 = np.array([12, 255, 255], dtype=np.uint8)
+        lower2 = np.array([168, 70, 60], dtype=np.uint8)
+        upper2 = np.array([179, 255, 255], dtype=np.uint8)
+        mask = cv2.bitwise_or(
+            cv2.inRange(hsv, lower1, upper1),
+            cv2.inRange(hsv, lower2, upper2),
+        )
+
+        kernel = np.ones((3, 3), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+        # HP 바는 가로로 긴 빨간색 연속 구간입니다.
+        candidates = []
+        for y in range(mask.shape[0]):
+            row = mask[y] > 0
+            if not np.any(row):
+                continue
+            padded = np.concatenate(([False], row, [False]))
+            changes = np.diff(padded.astype(np.int8))
+            starts = np.flatnonzero(changes == 1)
+            ends = np.flatnonzero(changes == -1)
+            for start, end in zip(starts, ends):
+                width = int(end - start)
+                if width >= 20:
+                    candidates.append((width, y, int(start), int(end)))
+
+        if len(candidates) < 2:
+            return None
+
+        # 여러 행에서 반복 검출되는 가장 긴 빨간 구간을 사용합니다.
+        candidates.sort(reverse=True)
+        top = candidates[:max(5, len(candidates) // 3)]
+        filled_width = float(np.median([c[0] for c in top]))
+
+        full_width = gw * 0.17
+        full_width = max(120.0, min(220.0, full_width))
+        filled_width = min(filled_width, full_width)
+        percent = (filled_width / full_width) * 100.0
+        return round(max(0.0, min(100.0, percent)), 1)
+    except Exception:
+        return None
+
 # =========================================================
 # 다크 테마
 # =========================================================
@@ -339,6 +425,11 @@ position_hunt_stop_event = threading.Event()
 mp_potion_running = False
 mp_potion_thread = None
 mp_potion_stop_event = threading.Event()
+
+# HP 포션 상태
+hp_potion_running = False
+hp_potion_thread = None
+hp_potion_stop_event = threading.Event()
 
 chat_ws = None
 chat_thread = None
@@ -1729,6 +1820,8 @@ def create_main_window():
             text, color = "일시정지", WARNING
         elif position_hunt_running:
             text, color = "제자리사냥 실행 중", SUCCESS
+        elif hp_potion_running:
+            text, color = "체력 포션 실행 중", DANGER
         elif mp_potion_running:
             text, color = "마나 포션 실행 중", INFO
         elif buff_running:
@@ -2138,6 +2231,156 @@ def create_main_window():
 
     make_button(
         mp_card, "■  마나 포션 중지", stop_mp_potion,
+        bg=CARD_3, active_bg=BORDER
+    ).pack(fill="x", padx=18, pady=(0, 18))
+
+    # =====================================================
+    # HP 포션 카드
+    # =====================================================
+    hp_outer, hp_card = make_card(position_hunt_page, bg=CARD)
+    hp_outer.pack(fill="x", padx=28, pady=(0, 18))
+
+    tk.Label(
+        hp_card, text="HP 포션",
+        bg=CARD, fg=TEXT, font=(FONT, 13, "bold")
+    ).pack(anchor="w", padx=18, pady=(17, 3))
+    tk.Label(
+        hp_card,
+        text="게임 창의 빨간 HP 게이지를 감지해 설정한 비율 이하에서 포션을 사용합니다.",
+        bg=CARD, fg=MUTED, font=(FONT, 8),
+        wraplength=700, justify="left"
+    ).pack(anchor="w", padx=18, pady=(0, 14))
+
+    hp_setting_row = tk.Frame(hp_card, bg=CARD)
+    hp_setting_row.pack(fill="x", padx=18, pady=(0, 12))
+
+    tk.Label(hp_setting_row, text="포션 키", bg=CARD, fg=MUTED, font=(FONT, 9)).pack(side="left")
+    hp_key_var = tk.StringVar(value=HP_POTION_DEFAULT_KEY)
+    hp_key_entry = tk.Entry(
+        hp_setting_row, textvariable=hp_key_var, width=8,
+        bg=CARD_3, fg=TEXT, insertbackground=TEXT,
+        relief="flat", font=(FONT, 10, "bold")
+    )
+    hp_key_entry.pack(side="left", padx=(8, 18), ipady=5)
+
+    tk.Label(hp_setting_row, text="사용 기준", bg=CARD, fg=MUTED, font=(FONT, 9)).pack(side="left")
+    hp_threshold_var = tk.StringVar(value=str(HP_POTION_DEFAULT_THRESHOLD))
+    hp_threshold_spin = tk.Spinbox(
+        hp_setting_row, from_=5, to=95, increment=5,
+        textvariable=hp_threshold_var, width=5,
+        bg=CARD_3, fg=TEXT, buttonbackground=CARD_3,
+        insertbackground=TEXT, relief="flat", font=(FONT, 10, "bold")
+    )
+    hp_threshold_spin.pack(side="left", padx=(8, 4), ipady=3)
+    tk.Label(hp_setting_row, text="% 이하", bg=CARD, fg=MUTED, font=(FONT, 9)).pack(side="left")
+
+    hp_status_var = tk.StringVar(value="대기 중")
+    hp_status_line = tk.Frame(hp_card, bg="#10161E")
+    hp_status_line.pack(fill="x", padx=18, pady=(0, 14))
+    tk.Label(hp_status_line, text="●", bg="#10161E", fg=DANGER, font=(FONT, 10)).pack(side="left", padx=(12, 7), pady=9)
+    tk.Label(hp_status_line, textvariable=hp_status_var, bg="#10161E", fg=TEXT, font=(FONT, 9, "bold")).pack(side="left")
+
+    def hp_potion_update_ui(status=None):
+        if status is not None:
+            safe_after(main_root, 0, lambda s=status: hp_status_var.set(s))
+
+    def get_hp_potion_settings():
+        key = hp_key_var.get().strip().lower()
+        if not key:
+            raise ValueError("포션 키를 입력해주세요.")
+        try:
+            threshold = float(hp_threshold_var.get())
+        except Exception:
+            raise ValueError("사용 기준은 숫자로 입력해주세요.")
+        if not 5 <= threshold <= 95:
+            raise ValueError("사용 기준은 5~95% 사이여야 합니다.")
+        return key, threshold
+
+    def hp_potion_worker():
+        global hp_potion_running
+        last_potion_time = 0.0
+        try:
+            while hp_potion_running and not exit_program and remaining_seconds > 0:
+                if hp_potion_stop_event.is_set():
+                    break
+                if paused:
+                    time.sleep(HP_POTION_CHECK_INTERVAL)
+                    continue
+                if not is_game_window_active():
+                    hp_potion_update_ui("게임 창 대기 중")
+                    time.sleep(HP_POTION_CHECK_INTERVAL)
+                    continue
+
+                hp_percent = detect_hp_percent()
+                if hp_percent is None:
+                    hp_potion_update_ui("HP 게이지 감지 중")
+                    time.sleep(HP_POTION_CHECK_INTERVAL)
+                    continue
+
+                try:
+                    _, threshold = get_hp_potion_settings()
+                except ValueError:
+                    hp_potion_update_ui("설정 확인 필요")
+                    time.sleep(HP_POTION_CHECK_INTERVAL)
+                    continue
+
+                if hp_percent <= threshold and (time.monotonic() - last_potion_time) >= 0.8:
+                    key, _ = get_hp_potion_settings()
+                    try:
+                        pyautogui.press(key)
+                        last_potion_time = time.monotonic()
+                        hp_potion_update_ui(f"포션 사용 • HP 약 {hp_percent:.0f}%")
+                    except Exception as e:
+                        log(f"HP 포션 키 입력 오류: {e}")
+                        hp_potion_update_ui("키 입력 오류")
+                else:
+                    hp_potion_update_ui(f"감지 중 • HP 약 {hp_percent:.0f}%")
+
+                time.sleep(HP_POTION_CHECK_INTERVAL)
+        finally:
+            hp_potion_running = False
+            hp_potion_update_ui("중지됨")
+            safe_after(main_root, 0, update_status)
+
+    def start_hp_potion():
+        global hp_potion_running, hp_potion_thread
+        if remaining_seconds <= 0:
+            messagebox.showwarning("라이선스", "라이선스가 만료되었습니다.")
+            return
+        try:
+            get_hp_potion_settings()
+        except ValueError as e:
+            messagebox.showwarning("HP 포션 설정", str(e))
+            return
+        if hp_potion_running:
+            return
+        hp_potion_stop_event.clear()
+        hp_potion_running = True
+        hp_potion_update_ui("게임 창 대기 중")
+        update_status()
+        log("HP 포션 감지를 시작했습니다.")
+        hp_potion_thread = threading.Thread(target=hp_potion_worker, daemon=True)
+        hp_potion_thread.start()
+
+    def stop_hp_potion():
+        global hp_potion_running, hp_potion_thread
+        hp_potion_stop_event.set()
+        hp_potion_running = False
+        hp_potion_update_ui("중지됨")
+        update_status()
+        log("HP 포션 감지를 중지했습니다.")
+        thread = hp_potion_thread
+        if thread and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=0.5)
+        hp_potion_thread = None
+
+    make_button(
+        hp_card, "❤️  HP 포션 시작", start_hp_potion,
+        bg=ACCENT, active_bg=ACCENT_HOVER
+    ).pack(fill="x", padx=18, pady=(0, 8))
+
+    make_button(
+        hp_card, "■  HP 포션 중지", stop_hp_potion,
         bg=CARD_3, active_bg=BORDER
     ).pack(fill="x", padx=18, pady=(0, 18))
 
@@ -3166,6 +3409,7 @@ def create_main_window():
         global running, paused, repeat_mode, exit_program
         global buff_running, chat_running, chat_connected, chat_ws
         global position_hunt_running, mp_potion_running
+        global hp_potion_running
 
         if exit_program:
             return
@@ -3178,6 +3422,8 @@ def create_main_window():
         position_hunt_stop_event.set()
         mp_potion_running = False
         mp_potion_stop_event.set()
+        hp_potion_running = False
+        hp_potion_stop_event.set()
         try:
             pass
         except Exception:
